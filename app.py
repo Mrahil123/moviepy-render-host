@@ -1,27 +1,18 @@
-from flask import Flask, request, send_file, jsonify
-import chess
-from PIL import Image, ImageDraw
-from io import BytesIO
-import ssl
-import requests
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.base import MIMEBase
-from email.mime.text import MIMEText
-from email import encoders
-import csv
-from random import randrange
+from flask import Flask, request, jsonify
 import os
 import tempfile
+import requests
+import base64
 from dotenv import load_dotenv
-from video import create_portrait_video
+from video import create_portrait_video  # Import your video creation logic
 import urllib3
 
 # Disable SSL warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+# Helper function to download a file
 def download_file(url, local_path):
-    """Download a file from URL and save it locally with better error handling"""
+    """Download a file from URL and save it locally with better error handling."""
     try:
         # Configure session with longer timeout and SSL verification disabled
         session = requests.Session()
@@ -49,6 +40,7 @@ def download_file(url, local_path):
     except Exception as e:
         return False, f"Error: {str(e)}"
 
+# Create Flask app
 def create_app():
     app = Flask(__name__)
     
@@ -113,12 +105,16 @@ def create_app():
                 )
                 
                 if success and os.path.exists(output_path):
-                    return send_file(
-                        output_path,
-                        mimetype='video/mp4',
-                        as_attachment=True,
-                        download_name='output_video.mp4'
-                    )
+                    # Encode video in base64
+                    with open(output_path, "rb") as video_file:
+                        video_base64 = base64.b64encode(video_file.read()).decode('utf-8')
+                    
+                    return jsonify({
+                        "success": True,
+                        "message": "Video created successfully",
+                        "video": video_base64,
+                        "mime_type": "video/mp4"
+                    })
                 else:
                     return jsonify({
                         "success": False,
