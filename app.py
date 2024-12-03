@@ -13,12 +13,25 @@ import csv
 from random import randrange
 import os
 import tempfile
-import base64
 from dotenv import load_dotenv
 from video import create_portrait_video
 
 # Load environment variables
 load_dotenv()
+
+def download_file(url, local_path):
+    """Download a file from URL and save it locally"""
+    try:
+        response = requests.get(url, stream=True)
+        response.raise_for_status()  # Raise an error for bad status codes
+        
+        with open(local_path, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+        return True
+    except Exception as e:
+        print(f"Error downloading file from {url}: {str(e)}")
+        return False
 
 def create_app():
     app = Flask(__name__)
@@ -39,11 +52,11 @@ def create_app():
                     "message": "No JSON data received"
                 }), 400
 
-            # Check for required fields
-            if 'image' not in data or 'audio' not in data:
+            # Check for required URLs
+            if 'image_url' not in data or 'audio_url' not in data:
                 return jsonify({
                     "success": False,
-                    "message": "Missing required fields: 'image' and/or 'audio'"
+                    "message": "Missing required fields: 'image_url' and/or 'audio_url'"
                 }), 400
 
             # Create temporary directory
@@ -54,15 +67,19 @@ def create_app():
                 output_path = os.path.join(temp_dir, "output_video.mp4")
                 
                 try:
-                    # Decode and save image
-                    image_data = base64.b64decode(data['image'])
-                    with open(image_path, 'wb') as f:
-                        f.write(image_data)
+                    # Download image
+                    if not download_file(data['image_url'], image_path):
+                        return jsonify({
+                            "success": False,
+                            "message": "Failed to download image from URL"
+                        }), 400
 
-                    # Decode and save audio
-                    audio_data = base64.b64decode(data['audio'])
-                    with open(audio_path, 'wb') as f:
-                        f.write(audio_data)
+                    # Download audio
+                    if not download_file(data['audio_url'], audio_path):
+                        return jsonify({
+                            "success": False,
+                            "message": "Failed to download audio from URL"
+                        }), 400
 
                     # Create video
                     success, message = create_portrait_video(
@@ -74,26 +91,19 @@ def create_app():
                     )
                     
                     if success and os.path.exists(output_path):
-                        # Read the output video and convert to base64
-                        with open(output_path, 'rb') as f:
-                            video_data = base64.b64encode(f.read()).decode('utf-8')
-                        
-                        return jsonify({
-                            "success": True,
-                            "video": video_data
-                        })
+                        # Read and return the video file
+                        return send_file(
+                            output_path,
+                            mimetype='video/mp4',
+                            as_attachment=True,
+                            download_name='output_video.mp4'
+                        )
                     else:
                         return jsonify({
                             "success": False,
                             "message": f"Video creation failed: {message}"
                         }), 500
 
-                except base64.binascii.Error:
-                    return jsonify({
-                        "success": False,
-                        "message": "Invalid base64 encoding in image or audio data"
-                    }), 400
-                        
                 except Exception as e:
                     return jsonify({
                         "success": False,
