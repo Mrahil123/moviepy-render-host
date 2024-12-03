@@ -1,8 +1,7 @@
-from flask import Flask, request, send_file,jsonify
+from flask import Flask, request, send_file, jsonify
 import chess
 from PIL import Image, ImageDraw
 from io import BytesIO
-
 import ssl
 import requests
 import smtplib
@@ -10,20 +9,18 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email.mime.text import MIMEText
 from email import encoders
-
 import csv
 from random import randrange
-
 import os
 from dotenv import load_dotenv
-
 from video import create_portrait_video
 
-# main app
+# Load environment variables
+load_dotenv()
+
 def create_app():
     app = Flask(__name__)
-
-
+    
     @app.route("/")
     def index():
         return "Hello Rahil Chess World!"
@@ -41,9 +38,12 @@ def create_app():
             volume=1.0,
             duration=10  # Set fixed duration
         )
-        print(message)
+        return jsonify({"success": success, "message": message})
     
     return app
+
+# Create the app instance
+app = create_app()
 
 if __name__ == "__main__":
     # Get port from environment variable, default to 4000
@@ -52,10 +52,8 @@ if __name__ == "__main__":
     # Get debug mode from environment variable, default to False
     debug = os.getenv('DEBUG', 'False').lower() == 'true'
     
-    # Get host from environment variable, default to '0.0.0.0'
-    # host = os.getenv('HOST', '0.0.0.0')
-    
     app.run(
+        host='0.0.0.0',  # Required for Render
         port=port,
         debug=debug
     )
