@@ -43,5 +43,16 @@ def create_app():
     return app
 
 if __name__ == "__main__":
-    app = create_app()
-    # app.run(port=8000, debug=True)
+    # Get port from environment variable, default to 4000
+    port = int(os.getenv('PORT', 4000))
+    
+    # Get debug mode from environment variable, default to False
+    debug = os.getenv('DEBUG', 'False').lower() == 'true'
+    
+    # Get host from environment variable, default to '0.0.0.0'
+    # host = os.getenv('HOST', '0.0.0.0')
+    
+    app.run(
+        port=port,
+        debug=debug
+    )
