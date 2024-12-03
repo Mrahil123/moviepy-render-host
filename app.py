@@ -14,6 +14,9 @@ from email import encoders
 import csv
 from random import randrange
 
+import os
+from dotenv import load_dotenv
+
 from video import create_portrait_video
 
 # main app
