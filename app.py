@@ -4,6 +4,7 @@ import base64
 from io import BytesIO
 from video import create_portrait_video  # Import your video creation logic
 import urllib3
+import os
 
 # Disable SSL warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
