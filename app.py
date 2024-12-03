@@ -1,20 +1,17 @@
 from flask import Flask, request, jsonify
-import os
-import tempfile
 import requests
 import base64
-from dotenv import load_dotenv
+from io import BytesIO
 from video import create_portrait_video  # Import your video creation logic
 import urllib3
 
 # Disable SSL warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# Helper function to download a file
-def download_file(url, local_path):
-    """Download a file from URL and save it locally with better error handling."""
+# Helper function to download a file and return in-memory bytes
+def download_file_to_memory(url):
+    """Download a file from URL and return its content as bytes."""
     try:
-        # Configure session with longer timeout and SSL verification disabled
         session = requests.Session()
         session.verify = False
         session.timeout = 30
@@ -29,16 +26,12 @@ def download_file(url, local_path):
         content_type = response.headers.get('content-type', '')
         if 'image' not in content_type and 'audio' not in content_type:
             raise ValueError(f"Invalid content type: {content_type}")
-
-        with open(local_path, 'wb') as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                if chunk:
-                    f.write(chunk)
-        return True, None
+        
+        return BytesIO(response.content), None
     except requests.exceptions.RequestException as e:
-        return False, f"Network error: {str(e)}"
+        return None, f"Network error: {str(e)}"
     except Exception as e:
-        return False, f"Error: {str(e)}"
+        return None, f"Error: {str(e)}"
 
 # Create Flask app
 def create_app():
@@ -72,54 +65,49 @@ def create_app():
                     "message": "Invalid URL format. URLs must start with http:// or https://"
                 }), 400
 
-            with tempfile.TemporaryDirectory() as temp_dir:
-                image_path = os.path.join(temp_dir, "input_image.png")
-                audio_path = os.path.join(temp_dir, "input_audio.mp3")
-                output_path = os.path.join(temp_dir, "output_video.mp4")
-                
-                # Download image
-                success, error_message = download_file(data['image_url'], image_path)
-                if not success:
-                    return jsonify({
-                        "success": False,
-                        "message": f"Failed to download image: {error_message}",
-                        "url": data['image_url']
-                    }), 400
+            # Download files into memory
+            image_file, error_message = download_file_to_memory(data['image_url'])
+            if not image_file:
+                return jsonify({
+                    "success": False,
+                    "message": f"Failed to download image: {error_message}",
+                    "url": data['image_url']
+                }), 400
 
-                # Download audio
-                success, error_message = download_file(data['audio_url'], audio_path)
-                if not success:
-                    return jsonify({
-                        "success": False,
-                        "message": f"Failed to download audio: {error_message}",
-                        "url": data['audio_url']
-                    }), 400
+            audio_file, error_message = download_file_to_memory(data['audio_url'])
+            if not audio_file:
+                return jsonify({
+                    "success": False,
+                    "message": f"Failed to download audio: {error_message}",
+                    "url": data['audio_url']
+                }), 400
 
-                # Create video
-                success, message = create_portrait_video(
-                    image_path,
-                    audio_path,
-                    output_path,
-                    volume=1.0,
-                    duration=10
-                )
+            # Create video in memory
+            output_buffer = BytesIO()
+            success, message = create_portrait_video(
+                image_file,
+                audio_file,
+                output_buffer,
+                volume=1.0,
+                duration=10
+            )
+            
+            if success:
+                # Encode video in base64
+                output_buffer.seek(0)
+                video_base64 = base64.b64encode(output_buffer.read()).decode('utf-8')
                 
-                if success and os.path.exists(output_path):
-                    # Encode video in base64
-                    with open(output_path, "rb") as video_file:
-                        video_base64 = base64.b64encode(video_file.read()).decode('utf-8')
-                    
-                    return jsonify({
-                        "success": True,
-                        "message": "Video created successfully",
-                        "video": video_base64,
-                        "mime_type": "video/mp4"
-                    })
-                else:
-                    return jsonify({
-                        "success": False,
-                        "message": f"Video creation failed: {message}"
-                    }), 500
+                return jsonify({
+                    "success": True,
+                    "message": "Video created successfully",
+                    "video": video_base64,
+                    "mime_type": "video/mp4"
+                })
+            else:
+                return jsonify({
+                    "success": False,
+                    "message": f"Video creation failed: {message}"
+                }), 500
 
         except Exception as e:
             return jsonify({
